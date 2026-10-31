@@ -1,0 +1,122 @@
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>
+#include <TinyGPSPlus.h>
+
+// WiFi credentials
+const char* ssid = "DIR-615-E057";
+const char* password = "72094112";
+
+// Telegram bot
+#define BOTtoken "8663227413:AAGVuILP0fJQM9H2ZQSCHlmSNvaosZhtGwU"
+#define CHAT_ID "2123287028"
+
+// Button
+#define BUTTON_PIN 13
+
+TinyGPSPlus gps;
+
+WiFiClientSecure client;
+UniversalTelegramBot bot(BOTtoken, client);
+
+bool trackingEnabled = false;
+unsigned long lastSend = 0;
+const unsigned long interval = 30000;
+
+void setup()
+{
+  Serial.begin(9600);   // GPS default baud
+  delay(2000);
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+  Serial.println("Connecting to WiFi");
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+  }
+
+  Serial.println("WiFi Connected");
+
+  client.setInsecure();
+}
+
+void loop()
+{
+  while (Serial.available())
+  {
+    gps.encode(Serial.read());
+  }
+
+  // Button toggle tracking
+  if (digitalRead(BUTTON_PIN) == LOW)
+  {
+    delay(400);
+
+    trackingEnabled = !trackingEnabled;
+
+    if (trackingEnabled)
+    {
+      bot.sendMessage(CHAT_ID,
+      "🚨 EMERGENCY ALERT 🚨\nTracking Started", "");
+      lastSend = 0;
+    }
+    else
+    {
+      bot.sendMessage(CHAT_ID,
+      "🛑 Tracking Stopped", "");
+    }
+
+    delay(2000);
+  }
+
+  // Send location to Telegram
+  if (trackingEnabled && millis() - lastSend > interval)
+  {
+    lastSend = millis();
+
+    String msg;
+
+    if (gps.location.isValid())
+    {
+      float lat = gps.location.lat();
+      float lon = gps.location.lng();
+
+      msg = "📍 Location Update\n";
+      msg += "Latitude: " + String(lat,6) + "\n";
+      msg += "Longitude: " + String(lon,6) + "\n";
+      msg += "https://www.google.com/maps?q=";
+      msg += String(lat,6) + "," + String(lon,6);
+    }
+    else
+    {
+      msg = "⚠ Waiting for GPS signal...";
+    }
+
+    bot.sendMessage(CHAT_ID, msg, "");
+  }
+
+  // Serial output like your original code
+  if (gps.location.isUpdated())
+  {
+    Serial.print("Latitude: ");
+    Serial.println(gps.location.lat(), 6);
+
+    Serial.print("Longitude: ");
+    Serial.println(gps.location.lng(), 6);
+
+    Serial.print("Satellites: ");
+    Serial.println(gps.satellites.value());
+
+    Serial.print("Google Maps: ");
+    Serial.print("https://www.google.com/maps?q=");
+    Serial.print(gps.location.lat(), 6);
+    Serial.print(",");
+    Serial.println(gps.location.lng(), 6);
+
+    Serial.println("----------------------");
+  }
+}
